@@ -1,39 +1,35 @@
-# Anima Character Prompt Generator — Vercel Edition
+# Anima Character Prompt Generator — Vercel Fixed Edition
 
-Веб-приложение для поиска персонажей аниме и сборки Positive / Negative Prompt. Работает как serverless-приложение на Vercel; локальный запуск через Flask также сохранён.
+## Correct GitHub root structure
 
-## Источники
-
-- AniList — персонажи, описания, изображения и связанные произведения.
-- Shikimori — дополнительный поиск персонажей.
-- Danbooru — safe-rated изображения и теги (если источник доступен).
-- Mudae — резервные данные и curated tags для Hajun / 波旬 из Kajiri Kamui Kagura.
-
-## Деплой с телефона через GitHub и Vercel
-
-1. Распакуйте ZIP на телефоне. В корне проекта должны быть `vercel.json`, `requirements.txt`, `app.py`, `services.py`, папки `api/`, `templates/` и `static/`.
-2. Откройте GitHub в браузере и создайте новый репозиторий: https://github.com/new . Например, `anima-character-prompt-generator`.
-3. В репозитории нажмите **Add file → Upload files** и загрузите содержимое папки проекта (именно файлы и папки внутри неё, не ZIP-архив). Нажмите **Commit changes**.
-4. Откройте https://vercel.com/new , войдите через GitHub и выберите созданный репозиторий.
-5. Нажмите **Deploy**. Vercel обнаружит `vercel.json`, установит зависимости из `requirements.txt` и создаст сайт.
-6. После деплоя откройте выданный адрес `*.vercel.app` на телефоне.
-
-### Важно для GitHub Mobile / телефона
-
-Если GitHub не позволяет загрузить целую папку из мобильного браузера, откройте GitHub в браузере с режимом **Версия для ПК**. Можно также создать репозиторий, а затем загрузить файлы через веб-интерфейс по частям. Не загружайте `__pycache__`.
-
-## Локальный запуск на Windows
-
-```bash
-pip install -r requirements.txt
-python app.py
+```text
+app.py
+services.py
+requirements.txt
+vercel.json
+.python-version
+templates/index.html
+public/style.css
+public/app.js
+.gitignore
+.vercelignore
+README.md
 ```
 
-Откройте `http://127.0.0.1:7860`. `launch.bat` также сохранён.
+Important: do not create an `api/` folder or upload an extra enclosing project folder. Vercel detects the Flask WSGI app exported as `app` from root `app.py`. Frontend files belong in `public/` because Vercel serves public assets through its CDN. Jinja template is bundled with the function via `includeFiles`.
 
-## Ограничения serverless
+## Deploy from GitHub
+1. Upload the CONTENTS of this folder to the GitHub repository root.
+2. In Vercel choose Add New → Project and import this repository.
+3. Set Root Directory to `./` (repository root).
+4. Do not set a custom Build Command or Output Directory. Let Vercel detect Flask.
+5. Deploy.
+6. Open `https://YOUR-DEPLOYMENT.vercel.app/api/health`. It should return JSON with `ok: true`.
 
-- Приложение не хранит пользовательские данные между запросами; профиль можно экспортировать в JSON.
-- Внешние источники могут ограничивать запросы или временно быть недоступны.
-- На бесплатном тарифе Vercel действуют ограничения длительности функций и трафика.
-- Для поиска Hajun добавлен отдельный fallback Mudae, так как Shikimori может его не содержать.
+## Search behavior
+- AniList and Shikimori are queried for the exact name.
+- Known alternate spellings are retried if exact search is empty.
+- Hajun has a verified Mudae fallback independent of AniList/Shikimori.
+- If public catalogs return nothing or are unavailable, a Manual result is shown so the user can still edit a profile and generate prompts.
+
+External sources can rate-limit or block serverless requests. Danbooru image/tag collection is optional; the app remains usable without it.
