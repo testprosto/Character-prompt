@@ -30,10 +30,6 @@ def clean_html(value):
 
 
 def normalize_title(value):
-    """
-    Normalize anime titles for comparison.
-    Supports Latin, Cyrillic and Japanese characters.
-    """
     value = (value or "").casefold().strip()
 
     return re.sub(
@@ -44,9 +40,6 @@ def normalize_title(value):
 
 
 def anime_matches(requested, titles):
-    """
-    Check whether a character belongs to the requested anime.
-    """
     if not requested:
         return True
 
@@ -121,6 +114,9 @@ def anilist_search(name, anime=""):
 
     data = response.json()
 
+    if data.get("errors"):
+        raise RuntimeError(str(data["errors"]))
+
     item = (data.get("data") or {}).get("Character")
 
     if not item:
@@ -143,8 +139,6 @@ def anilist_search(name, anime=""):
         title for title in anime_names if title
     ))
 
-    # Strict anime filtering.
-    # Do not return a character from an unrelated anime.
     if anime and not anime_matches(anime, anime_names):
         return []
 
@@ -172,15 +166,6 @@ def anilist_search(name, anime=""):
 # ============================================================
 
 def shikimori_search(name, anime=""):
-    """
-    Search Shikimori characters.
-
-    Search endpoint:
-    /api/characters/search
-
-    Then fetch character details to check anime relations.
-    """
-
     search_url = f"{SHIKIMORI}/api/characters/search"
 
     headers = {
@@ -190,9 +175,7 @@ def shikimori_search(name, anime=""):
 
     response = requests.get(
         search_url,
-        params={
-            "search": name
-        },
+        params={"search": name},
         headers=headers,
         timeout=12
     )
@@ -212,7 +195,6 @@ def shikimori_search(name, anime=""):
         if not character_id:
             continue
 
-        # Fetch detailed character information.
         detail_response = requests.get(
             f"{SHIKIMORI}/api/characters/{character_id}",
             headers=headers,
@@ -237,7 +219,6 @@ def shikimori_search(name, anime=""):
             title for title in anime_names if title
         ))
 
-        # Exclude characters from unrelated anime.
         if anime and not anime_matches(anime, anime_names):
             continue
 
@@ -330,7 +311,6 @@ CHARACTER_ALIASES = {
 MUDAE_HAJUN = {
     "name": "Hajun",
     "anime": "Kajiri Kamui Kagura",
-
     "url": "https://mudae.net/character/4062946/Hajun",
 
     "aliases": [
@@ -350,15 +330,6 @@ MUDAE_HAJUN = {
 # ============================================================
 
 def search_character(name, anime=""):
-    """
-    Search AniList and Shikimori.
-
-    Hajun has a verified Mudae fallback.
-
-    Other characters receive a Manual fallback
-    when public catalogs have no matching result.
-    """
-
     key = (name or "").casefold().strip()
 
     aliases = CHARACTER_ALIASES.get(key, [name])
@@ -372,10 +343,12 @@ def search_character(name, anime=""):
     warnings = []
 
     # --------------------------------------------------------
-    # Add verified Hajun result.
+    # Verified Hajun fallback
     # --------------------------------------------------------
 
-    if key in hajun_terms:
+    is_hajun = key in hajun_terms
+
+    if is_hajun:
         if (
             not anime
             or anime_matches(
@@ -394,8 +367,7 @@ def search_character(name, anime=""):
                     MUDAE_HAJUN["anime"]
                 ],
                 "description": (
-                    "Verified Mudae character entry. "
-                    "External catalog lookups are optional."
+                    "Verified Mudae character entry."
                 ),
                 "image": (
                     "https://mudae.net/uploads/"
@@ -406,31 +378,45 @@ def search_character(name, anime=""):
             })
 
     # --------------------------------------------------------
-    # Query both catalogs independently.
+    # Query sources independently
     # --------------------------------------------------------
 
     def query_pair(term):
         found = []
         errors = []
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        # Skip AniList completely for Hajun and its aliases.
+        if term.casefold() in hajun_terms:
             tasks = {
-                "AniList": pool.submit(
-                    anilist_search,
+                "Shikimori": lambda: shikimori_search(
+                    term,
+                    anime
+                )
+            }
+        else:
+            tasks = {
+                "AniList": lambda: anilist_search(
                     term,
                     anime
                 ),
 
-                "Shikimori": pool.submit(
-                    shikimori_search,
+                "Shikimori": lambda: shikimori_search(
                     term,
                     anime
                 )
             }
 
-            for label, future in tasks.items():
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = {
+                label: pool.submit(func)
+                for label, func in tasks.items()
+            }
+
+            for label, future in futures.items():
                 try:
-                    found.extend(future.result(timeout=20))
+                    found.extend(
+                        future.result(timeout=20)
+                    )
 
                 except Exception as exc:
                     errors.append(
@@ -443,23 +429,17 @@ def search_character(name, anime=""):
         return found, errors
 
     # --------------------------------------------------------
-    # Exact search.
+    # Exact search
     # --------------------------------------------------------
 
     exact, errors = query_pair(name)
 
     candidates.extend(exact)
 
-    # Shikimori is optional.
-    # Its failure must not interrupt successful results.
-    warnings.extend(
-        error
-        for error in errors
-        if not error.startswith("Shikimori")
-    )
+    warnings.extend(errors)
 
     # --------------------------------------------------------
-    # Try alternate names if exact search found nothing.
+    # Alternate names
     # --------------------------------------------------------
 
     if not exact and len(aliases) > 1:
@@ -468,18 +448,13 @@ def search_character(name, anime=""):
             found, errors = query_pair(variant)
 
             candidates.extend(found)
-
-            warnings.extend(
-                error
-                for error in errors
-                if not error.startswith("Shikimori")
-            )
+            warnings.extend(errors)
 
             if found:
                 break
 
     # --------------------------------------------------------
-    # Final anime filter.
+    # Anime filter
     # --------------------------------------------------------
 
     if anime:
@@ -501,7 +476,7 @@ def search_character(name, anime=""):
         candidates = filtered
 
     # --------------------------------------------------------
-    # Remove duplicates.
+    # Remove duplicates
     # --------------------------------------------------------
 
     unique = []
@@ -521,7 +496,7 @@ def search_character(name, anime=""):
             unique.append(item)
 
     # --------------------------------------------------------
-    # Manual fallback.
+    # Manual fallback
     # --------------------------------------------------------
 
     if not unique:
@@ -581,13 +556,6 @@ def fetch_mudae_data(character):
 
         html = response.text
 
-        plain = unescape(
-            re.sub(r"<[^>]+>", " ", html)
-        )
-
-        plain = re.sub(r"\s+", " ", plain)
-
-        # Extract tag sections.
         look_html = re.search(
             r"Look:\s*(.*?)(?:Other:|Custom Lists|Images \()",
             html,
@@ -618,7 +586,6 @@ def fetch_mudae_data(character):
                 if unescape(value).strip()
             )
 
-        # Extract image URLs.
         image_urls = re.findall(
             r"""(?:src|data-src|href)=["']((?:https?://|/uploads/)[^"']+)["']""",
             html,
@@ -690,7 +657,7 @@ def fetch_booru_data(name, anime=""):
     errors = []
 
     # --------------------------------------------------------
-    # Search character tags.
+    # Search tags
     # --------------------------------------------------------
 
     for term in variants[:1]:
@@ -720,7 +687,7 @@ def fetch_booru_data(name, anime=""):
             )
 
     # --------------------------------------------------------
-    # Only character category tags.
+    # Character tags
     # --------------------------------------------------------
 
     character_tags = [
@@ -732,7 +699,7 @@ def fetch_booru_data(name, anime=""):
     candidate_tags = character_tags[:3] or [variants[0]]
 
     # --------------------------------------------------------
-    # Search safe-rated posts.
+    # Safe-rated posts
     # --------------------------------------------------------
 
     for tag in candidate_tags:
@@ -772,7 +739,7 @@ def fetch_booru_data(name, anime=""):
             )
 
     # --------------------------------------------------------
-    # Remove duplicate images.
+    # Deduplicate images
     # --------------------------------------------------------
 
     seen = set()
@@ -892,7 +859,6 @@ def build_character_profile(character, booru, mudae=None):
             (post.get("tags") or "").split()
         )
 
-    # Count tags.
     counts = {}
 
     for tag in all_tags:
@@ -916,7 +882,7 @@ def build_character_profile(character, booru, mudae=None):
         ][:18]
 
     # --------------------------------------------------------
-    # Curated Mudae tags.
+    # Curated Mudae tags
     # --------------------------------------------------------
 
     mudae_tags = [
@@ -926,59 +892,24 @@ def build_character_profile(character, booru, mudae=None):
     ]
 
     curated = {
-        "Dark Skin": (
-            "skin",
-            "dark skin"
-        ),
-
-        "Blonde Hair": (
-            "hair",
-            "blonde hair"
-        ),
-
-        "Black Sclera": (
-            "eyes",
-            "black sclera"
-        ),
-
-        "White Eyes": (
-            "eyes",
-            "white eyes"
-        ),
-
-        "Forehead Eye": (
-            "traits",
-            "third eye on forehead"
-        ),
-
-        "Long Earlobes": (
-            "traits",
-            "long earlobes"
-        ),
-
-        "Barefoot": (
-            "clothing",
-            "barefoot"
-        ),
-
-        "Earrings": (
-            "accessories",
-            "earrings"
-        ),
+        "Dark Skin": ("skin", "dark skin"),
+        "Blonde Hair": ("hair", "blonde hair"),
+        "Black Sclera": ("eyes", "black sclera"),
+        "White Eyes": ("eyes", "white eyes"),
+        "Forehead Eye": ("traits", "third eye on forehead"),
+        "Long Earlobes": ("traits", "long earlobes"),
+        "Barefoot": ("clothing", "barefoot"),
+        "Earrings": ("accessories", "earrings"),
     }
 
     for label, (category, prompt_tag) in curated.items():
         if label in mudae_tags:
-            categories.setdefault(
-                category,
-                []
-            ).append(prompt_tag)
+            categories.setdefault(category, []).append(prompt_tag)
 
     description = character.get("description") or ""
 
     return {
         "character": character,
-
         "description": description,
 
         "appearance": categories.get("body", []),
@@ -990,9 +921,7 @@ def build_character_profile(character, booru, mudae=None):
         },
 
         "clothing": categories.get("clothing", []),
-
         "accessories": categories.get("accessories", []),
-
         "special_traits": categories.get("traits", []),
 
         "personality": [
@@ -1005,15 +934,10 @@ def build_character_profile(character, booru, mudae=None):
         ],
 
         "abilities": [],
-
         "history": "",
-
         "all_tags": ranked[:100],
-
         "mudae_tags": mudae_tags,
-
         "mudae_images": mudae.get("images", []),
-
         "mudae_url": mudae.get("url"),
 
         "evidence_note": (
@@ -1057,7 +981,6 @@ def generate_prompts(profile):
     character = profile.get("character") or {}
 
     name = character.get("name") or "character"
-
     anime = character.get("anime") or ""
 
     colors = profile.get("colors") or {}
@@ -1066,37 +989,17 @@ def generate_prompts(profile):
         name,
         anime,
 
-        *split_tags(
-            profile.get("appearance")
-        ),
-
-        *split_tags(
-            colors.get("skin")
-        ),
-
-        *split_tags(
-            colors.get("hair")
-        ),
-
-        *split_tags(
-            colors.get("eyes")
-        ),
-
-        *split_tags(
-            profile.get("clothing")
-        ),
-
-        *split_tags(
-            profile.get("accessories")
-        ),
-
-        *split_tags(
-            profile.get("special_traits")
-        ),
+        *split_tags(profile.get("appearance")),
+        *split_tags(colors.get("skin")),
+        *split_tags(colors.get("hair")),
+        *split_tags(colors.get("eyes")),
+        *split_tags(profile.get("clothing")),
+        *split_tags(profile.get("accessories")),
+        *split_tags(profile.get("special_traits")),
     ]
 
-    # Remove duplicates.
     positive = []
+    seen = set()
 
     for item in groups:
         item = re.sub(
@@ -1105,10 +1008,10 @@ def generate_prompts(profile):
             str(item)
         ).strip()
 
-        if item and item.casefold() not in {
-            value.casefold()
-            for value in positive
-        }:
+        key = item.casefold()
+
+        if item and key not in seen:
+            seen.add(key)
             positive.append(item)
 
     positive = ", ".join(positive)
