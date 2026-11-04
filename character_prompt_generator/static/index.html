@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Character Prompt Generator — Anima</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">A</div><div><b>ANIMA</b><span>CHARACTER PROMPT GENERATOR</span></div></div>
+    <div class="top-meta"><span class="status-dot"></span> WEB WORKSPACE</div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow">AI CHARACTER RESEARCH WORKSPACE</div>
+      <h1>Character <em>Prompt</em> Generator</h1>
+      <p>Собери визуальные данные персонажа из открытых источников и преврати их в промпт для Anima.</p>
+    </section>
+
+    <section class="search-panel panel">
+      <div class="section-heading"><div><span class="step">01</span><h2>Поиск персонажа</h2></div><span class="muted">AniList · Shikimori · Danbooru · Mudae</span></div>
+      <div class="search-grid">
+        <label>Имя персонажа<input id="name" placeholder="Например: Hajun" value="Hajun"></label>
+        <label>Аниме / произведение<input id="anime" placeholder="Например: Kajiri Kamui Kagura" value="Kajiri Kamui Kagura"></label>
+        <button class="primary" id="searchBtn">Найти персонажа <span>→</span></button>
+      </div>
+      <div id="searchStatus" class="status-line">Введите имя и нажмите «Найти персонажа».</div>
+      <div id="results" class="results"></div>
+    </section>
+
+    <section id="workspace" class="workspace hidden">
+      <div class="section-heading"><div><span class="step">02</span><h2>Character Profile</h2></div><span class="muted" id="sourceLabel">SOURCE DATA</span></div>
+      <div class="profile-head panel">
+        <img id="characterImage" alt="" src="">
+        <div class="profile-title"><div class="eyebrow">SELECTED CHARACTER</div><h2 id="characterName">—</h2><p id="characterAnime">—</p><a id="characterLink" target="_blank" rel="noopener">Открыть источник ↗</a></div>
+        <button class="secondary" id="analyzeBtn">Собрать данные и теги ↻</button>
+      </div>
+
+      <div id="analysisStatus" class="status-line"></div>
+      <div id="gallery" class="gallery"></div>
+
+      <div class="editor-grid">
+        <div class="panel editor-panel">
+          <div class="section-heading"><div><span class="step">03</span><h2>Визуальные признаки</h2></div><span class="muted">EDITABLE</span></div>
+          <label>Внешность и телосложение<textarea id="appearance" rows="3" placeholder="slim body, long face..."></textarea></label>
+          <div class="two-col">
+            <label>Кожа<textarea id="skin" rows="2"></textarea></label>
+            <label>Волосы<textarea id="hair" rows="2"></textarea></label>
+            <label>Глаза<textarea id="eyes" rows="2"></textarea></label>
+            <label>Одежда<textarea id="clothing" rows="2"></textarea></label>
+          </div>
+          <label>Украшения и аксессуары<textarea id="accessories" rows="2"></textarea></label>
+          <label>Особые признаки<textarea id="traits" rows="2"></textarea></label>
+          <div class="section-heading subhead"><div><span class="step">04</span><h2>Дополнительная информация</h2></div></div>
+          <label>Характер<textarea id="personality" rows="2" placeholder="Используется для выражения лица и позы, если это нужно."></textarea></label>
+          <label>Способности<textarea id="abilities" rows="2" placeholder="Добавляй только визуально проявляющиеся способности."></textarea></label>
+          <label>История / заметки<textarea id="history" rows="2"></textarea></label>
+          <div class="actions"><button class="secondary" id="regenerateBtn">Обновить промпты</button><button class="secondary" id="exportBtn">Экспорт JSON ↓</button></div>
+        </div>
+
+        <aside class="panel prompt-panel">
+          <div class="section-heading"><div><span class="step">05</span><h2>Generated Prompts</h2></div><span class="live-pill">READY TO USE</span></div>
+          <label>Positive Prompt<textarea id="positive" rows="11" readonly></textarea></label>
+          <button class="primary full" data-copy="positive">Копировать Positive Prompt ⧉</button>
+          <label class="negative-label">Negative Prompt<textarea id="negative" rows="6" readonly></textarea></label>
+          <button class="secondary full" data-copy="negative">Копировать Negative Prompt ⧉</button>
+          <p class="disclaimer">Теги Danbooru — подсказки из изображений, а не гарантированно каноническое описание. Проверяй референсы перед генерацией.</p>
+        </aside>
+      </div>
+    </section>
+    <footer>ANIMA CHARACTER LAB <span>CHARACTER DATA TOOL · VERCEL EDITION</span></footer>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
